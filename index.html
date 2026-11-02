@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>مترجم جلسه</title>
+<style>
+/* Layout: phone-first. A slim control bar on top; below it the meeting as a running list,
+   each line = small original text + large Persian translation. No sounds anywhere. */
+:root {
+  --bg: #f3f4f6; --surface: #ffffff; --ink: #1b2130; --muted: #5d6475; --line: #dde0e7;
+  --gold: #8a6512; --gold-soft: #f4ecd9; --rec: #b3261e;
+  --fa: "Vazirmatn", -apple-system, "Segoe UI", Tahoma, sans-serif;
+  --lat: -apple-system, "Segoe UI", Arial, sans-serif;
+  --size: 19px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #11141b; --surface: #1a1f2a; --ink: #e9ebf1; --muted: #a0a7b8; --line: #2c3240;
+    --gold: #dcb662; --gold-soft: #2a2416; --rec: #ff8a80; color-scheme: dark; }
+}
+:root.big { --size: 23px; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--fa); font-size: var(--size); line-height: 1.6;
+  display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); }
+header { background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: 10px max(14px, env(safe-area-inset-right, 0px)) 10px max(14px, env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 8px; font-size: 16px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+h1 { font-size: 1.05em; margin: 0; flex: 1; }
+button, select, input { font: inherit; font-size: 15px; }
+button, select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 6px 14px; }
+#go { background: var(--ink); color: var(--surface); border-color: var(--ink); font-weight: 600; padding: 8px 20px; }
+#go.on { background: var(--rec); border-color: var(--rec); color: #fff; }
+#state { color: var(--muted); font-size: 13px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--rec); margin-inline-end: 5px; }
+@media (prefers-reduced-motion: no-preference) { .dot { animation: pulse 1.2s infinite; } }
+@keyframes pulse { 50% { opacity: .25; } }
+#keyRow { background: var(--gold-soft); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+#keyRow input { direction: ltr; width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.note { color: var(--muted); font-size: 13px; margin: 0; }
+
+main { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 12px max(14px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 14px; }
+.empty { color: var(--muted); font-size: 16px; }
+.item { display: flex; flex-direction: column; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.src { margin: 0; direction: ltr; text-align: left; font-family: var(--lat); color: var(--muted); font-size: .72em; line-height: 1.45; }
+.fa { margin: 0; font-weight: 600; }
+.fa.wait { color: var(--muted); font-weight: 400; font-size: .8em; }
+#interim { direction: ltr; text-align: left; font-family: var(--lat); color: var(--muted); font-style: italic; font-size: .72em; min-height: 1.2em; }
+#summary { background: var(--gold-soft); border-radius: 12px; padding: 12px 14px; white-space: pre-wrap; }
+#summary h2 { margin: 0 0 6px; font-size: .85em; color: var(--gold); }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>مترجم جلسه</h1>
+    <button type="button" id="go">شروع</button>
+  </div>
+  <div class="row">
+    <select id="lang" aria-label="زبان گوینده">
+      <option value="de-DE">آلمانی</option>
+      <option value="en-US">انگلیسی</option>
+    </select>
+    <button type="button" id="sum">خلاصهٔ جلسه</button>
+    <button type="button" id="big">A+</button>
+    <button type="button" id="clear">پاک کردن</button>
+    <button type="button" id="keyBtn">کلید</button>
+  </div>
+  <div id="state"></div>
+  <div id="keyRow" hidden>
+    <label for="key">کلید API (از console.anthropic.com):</label>
+    <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…">
+    <div class="row"><button type="button" id="keySave">ذخیره</button><button type="button" id="keyDel">حذف کلید</button></div>
+    <p class="note">کلید فقط روی همین گوشی ذخیره می‌شه.</p>
+  </div>
+</header>
+
+<main id="main">
+  <p class="empty" id="empty">گوشی رو روی میز بذار و «شروع» رو بزن. هر چی بگن، زیرش ترجمهٔ فارسی میاد. هیچ صدایی پخش نمی‌شه.</p>
+  <div id="list"></div>
+  <div id="interim"></div>
+  <div id="summary" hidden></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+function read(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }
+
+// --- Key ---
+const KEY = "meeting-translator-key";
+const getKey = () => read(KEY);
+function showState(msg) { $("state").innerHTML = msg || (getKey() ? "Claude: فعال" : "اول «کلید» رو بزن و کلید API رو وارد کن."); }
+$("keyBtn").onclick = () => { $("keyRow").hidden = !$("keyRow").hidden; };
+$("keySave").onclick = () => { const k = $("key").value.trim(); if (k) { store(KEY, k); $("key").value = ""; $("keyRow").hidden = true; showState(); } };
+$("keyDel").onclick = () => { store(KEY, null); showState(); };
+if (!getKey()) $("keyRow").hidden = false;
+showState();
+
+// --- Text size ---
+function setBig(on) { document.documentElement.classList.toggle("big", on); store("meeting-big", on ? "1" : null); }
+$("big").onclick = () => setBig(!document.documentElement.classList.contains("big"));
+setBig(read("meeting-big") === "1");
+
+// --- Claude ---
+async function ask(system, user, maxTokens) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": getKey(),
+      "anthropic-version": "2026-10-21",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-5-5",
+      max_tokens: maxTokens,
+      output_config: { effort: "low" },
+      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: user }],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const m = (err.error && err.error.message) || "";
+    throw new Error(res.status === 401 ? "کلید اشتباهه" : /credit|billing/i.test(m) ? "اعتبار حساب API تموم شده"
+      : res.status === 429 ? "درخواست زیاد شد، چند ثانیه صبر کن" : "خطا " + res.status);
+  }
+  const data = await res.json();
+  if (data.stop_reason === "refusal") throw new Error("Claude جواب نداد");
+  return (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
+}
+
+const TRANSLATE = `You translate a live meeting in Germany (for example a parents' meeting at a school) into Persian for a listener whose German is B1.
+The text is speech recognition output: it often mishears words and splits sentences. Use the earlier lines to work out what the speaker most likely meant, and translate that meaning, not the literal errors.
+Reply with only the Persian translation of the newest lines: natural, clear, everyday Persian. Keep names, dates, times, amounts and places exact. No notes, no quotes, no original text.`;
+
+const SUMMARY = `You summarise a meeting in Germany for a listener whose German is B1. The text is speech recognition output and may contain errors.
+Write in simple Persian: first a short summary (3-6 bullet points), then a list of everything she must do or remember (dates, times, things to bring, payments, forms, deadlines). If nothing to do, say so. Plain text, use "•" for bullets.`;
+
+const lines = [];       // all heard lines, for context and the summary
+let pending = [], timer = null;
+
+function addLine(text) {
+  text = text.trim(); if (!text) return;
+  $("empty").hidden = true;
+  lines.push(text);
+  const item = document.createElement("div"); item.className = "item";
+  item.innerHTML = `<p class="src">${esc(text)}</p><p class="fa wait">…</p>`;
+  $("list").appendChild(item);
+  follow();
+  if (!getKey()) { item.querySelector(".fa").textContent = "(بدون کلید ترجمه نمی‌شه)"; return; }
+  pending.push(item);
+  clearTimeout(timer);
+  timer = setTimeout(translate, 700);
+}
+
+async function translate() {
+  const items = pending; pending = [];
+  if (!items.length) return;
+  const now = items.map(i => i.querySelector(".src").textContent).join(" ");
+  const before = lines.slice(0, -items.length).slice(-8).join(" ");
+  const out = items[items.length - 1].querySelector(".fa");
+  items.slice(0, -1).forEach(i => i.querySelector(".fa").remove());
+  try {
+    const fa = await ask(TRANSLATE, `Earlier: """${before}"""\n\nNewest lines: """${now}"""`, 800);
+    out.textContent = fa; out.classList.remove("wait");
+    showState();
+  } catch (e) {
+    out.textContent = "(ترجمه نشد)";
+    showState("Claude: " + e.message);
+  }
+  follow();
+}
+
+// Keep the newest line in view only while she is already at the bottom.
+function follow() {
+  const m = $("main");
+  if (m.scrollHeight - m.scrollTop - m.clientHeight < 160) m.scrollTop = m.scrollHeight;
+}
+
+$("sum").onclick = async () => {
+  if (!getKey()) { showState("اول کلید رو وارد کن."); return; }
+  if (!lines.length) { showState("هنوز چیزی شنیده نشده."); return; }
+  const box = $("summary"); box.hidden = false;
+  box.innerHTML = `<h2>خلاصهٔ جلسه</h2>در حال آماده شدن…`;
+  $("main").scrollTop = $("main").scrollHeight;
+  try {
+    const s = await ask(SUMMARY, lines.join("\n").slice(-60000), 2000);
+    box.innerHTML = `<h2>خلاصهٔ جلسه</h2>${esc(s)}`;
+  } catch (e) { box.innerHTML = `<h2>خلاصهٔ جلسه</h2>نشد: ${esc(e.message)}`; }
+  $("main").scrollTop = $("main").scrollHeight;
+};
+
+$("clear").onclick = () => {
+  lines.length = 0; pending = []; $("list").innerHTML = ""; $("summary").hidden = true; $("empty").hidden = false;
+};
+
+// --- Listening (Safari on iPhone, Chrome, Edge) ---
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, running = false, wake = null;
+
+async function keepAwake() {
+  try { if ("wakeLock" in navigator) wake = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => { if (running && document.visibilityState === "visible") keepAwake(); });
+
+function start() {
+  if (!SR) { showState("این مرورگر تشخیص گفتار نداره. صفحه رو با Safari باز کن."); return; }
+  rec = new SR();
+  rec.lang = $("lang").value; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) addLine(r[0].transcript); else interim += r[0].transcript;
+    }
+    $("interim").textContent = interim;
+    if (interim) follow();
+  };
+  rec.onerror = e => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      stop(); showState("اجازهٔ میکروفون داده نشد. Settings ← Safari ← Microphone رو چک کن، و Siri/Dictation باید روشن باشه.");
+    } else if (e.error === "network") showState("تشخیص گفتار به اینترنت نیاز داره.");
+  };
+  rec.onend = () => { if (running) setTimeout(() => { try { rec.start(); } catch (err) {} }, 150); };
+  try { rec.start(); } catch (err) {}
+  running = true; keepAwake();
+  $("go").textContent = "توقف"; $("go").classList.add("on");
+  showState(`<span class="dot"></span>در حال گوش دادن`);
+}
+function stop() {
+  running = false;
+  try { rec && rec.stop(); } catch (err) {}
+  try { wake && wake.release(); } catch (err) {}
+  $("go").textContent = "شروع"; $("go").classList.remove("on"); $("interim").textContent = "";
+  showState();
+}
+$("go").onclick = () => running ? stop() : start();
+$("lang").onchange = () => { if (running) { stop(); start(); } };
+</script>
+</body>
+</html>
